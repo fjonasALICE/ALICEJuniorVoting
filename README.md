@@ -1,6 +1,6 @@
 # Survey Results Analysis
 
-![Example Survey Analysis](./exampleplots/Endorsements_Do_you_endorse_John_Smith_for_something.png)
+![Example Survey Analysis](./exampleplots/Endorsements_Do_you_endorse_John_Smith_for_someth.png)
 
 *Example output showing response distribution, vote allocation, and step-by-step calculation using the largest remainder method.*
 
