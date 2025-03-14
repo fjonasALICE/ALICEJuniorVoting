@@ -1,4 +1,4 @@
-# Survey Results Analysis
+# ALICE Junior Survey Results Analysis
 
 ![Example Survey Analysis](./exampleplots/Endorsements__Do_you_endorse_John_Smith_for_someth.png)
 
