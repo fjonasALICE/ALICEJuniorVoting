@@ -1,5 +1,9 @@
 # Survey Results Analysis
 
+![Example Survey Analysis](./exampleplots/Endorsements_Do_you_endorse_John_Smith_for_something.png)
+
+*Example output showing response distribution, vote allocation, and step-by-step calculation using the largest remainder method.*
+
 This script analyzes survey results from a CSV file, calculates the percentage of votes for each answer (excluding "No Selection" options), visualizes these percentages, and determines how to allocate 3 votes proportionally.
 
 ## Requirements
@@ -65,7 +69,7 @@ The script will:
 
 ## Vote Allocation Method
 
-The script uses the largest remainder method to allocate 3 votes:
+The script uses the largest remainder method to allocate 3 votes [Quota method Wikipedia](https://en.wikipedia.org/wiki/Quota_method):
 
 1. Calculate the proportion of votes each answer should receive
 2. Allocate whole votes first
