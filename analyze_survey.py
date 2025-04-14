@@ -18,32 +18,37 @@ def read_survey_data(file_path):
 def analyze_question(df, question_column):
     """
     Analyze a specific question from the survey data.
-    Returns the count and percentage for each answer, excluding 'No Selection'.
-    Also returns the count of 'No Selection' responses.
+    Returns the count and percentage for each answer, excluding 'NO OPINION' responses.
+    Also returns the count of 'NO OPINION' responses.
     """
-    # Count total number of rows (all responses, including NaN)
+    # Count total number of rows (all responses)
     total_rows = len(df)
     
-    # Get all responses for this question (excluding NaN which represent 'No Selection')
-    responses = df[question_column].dropna()
+    # Get all responses for this question
+    all_responses = df[question_column].dropna()
     
-    # Calculate 'No Selection' count
-    no_selection_count = total_rows - len(responses)
+    # Filter out "NO OPINION" responses
+    no_opinion_pattern = "NO OPINION"
+    no_opinion_mask = all_responses.str.contains(no_opinion_pattern, case=False, na=False)
+    no_opinion_count = no_opinion_mask.sum()
+    
+    # Get valid responses (excluding NO OPINION)
+    responses = all_responses[~no_opinion_mask]
     
     # Count occurrences of each response
     response_counts = Counter(responses)
     
-    # Calculate total valid responses (excluding None/NaN which represent 'No Selection')
+    # Calculate total valid responses (excluding NO OPINION)
     total_valid_responses = len(responses)
     
     if total_valid_responses == 0:
-        return {}, {}, 0, no_selection_count
+        return {}, {}, 0, no_opinion_count
     
     # Calculate percentages
     response_percentages = {answer: (count / total_valid_responses) * 100 
                            for answer, count in response_counts.items()}
     
-    return response_counts, response_percentages, total_valid_responses, no_selection_count
+    return response_counts, response_percentages, total_valid_responses, no_opinion_count
 
 def allocate_three_votes(percentages):
     """
@@ -114,7 +119,7 @@ def allocate_three_votes(percentages):
     
     return votes_per_answer, calculation_text
 
-def plot_question_results(question, percentages, vote_allocation, total_responses, no_selection_count, calculation_text, output_dir='plots'):
+def plot_question_results(question, percentages, vote_allocation, total_responses, no_opinion_count, calculation_text, output_dir='plots'):
     """
     Create visualizations for a question showing:
     1. A pie chart for percentages of each answer
@@ -124,6 +129,9 @@ def plot_question_results(question, percentages, vote_allocation, total_response
     """
     if not percentages:
         return
+    
+    # Calculate total number of responses (valid + no opinion)
+    total_number_of_responses = total_responses + no_opinion_count
     
     # Create output directory if it doesn't exist
     os.makedirs(output_dir, exist_ok=True)
@@ -151,19 +159,29 @@ def plot_question_results(question, percentages, vote_allocation, total_response
     answers = list(percentages.keys())
     pcts = list(percentages.values())
     
+    # Create simplified labels for the pie chart
+    simplified_labels = []
+    for answer in answers:
+        if "YES" in answer.upper():
+            simplified_labels.append("Yes")
+        elif "NO" in answer.upper() and "OPINION" not in answer.upper():
+            simplified_labels.append("No")
+        elif "ABSTAIN" in answer.upper():
+            simplified_labels.append("Abstain")
+        else:
+            simplified_labels.append(answer)  # Keep original if no match
+    
     # Sort by percentage in descending order for better labeling
     sorted_indices = np.argsort(pcts)[::-1]
     answers = [answers[i] for i in sorted_indices]
+    simplified_labels = [simplified_labels[i] for i in sorted_indices]
     pcts = [pcts[i] for i in sorted_indices]
     
-    # Assign specific colors for Yes, No, and Abstain, and generate colors for other answers
+    # Assign specific colors for Yes, No, and Abstain
     color_map = {
         'Yes': '#2ecc71',  # Green
-        'yes': '#2ecc71',  # Green (lowercase)
         'No': '#e74c3c',   # Red
-        'no': '#e74c3c',   # Red (lowercase)
         'Abstain': '#95a5a6',  # Gray
-        'abstain': '#95a5a6'   # Gray (lowercase)
     }
     
     # Generate a list of colors for each answer
@@ -171,17 +189,12 @@ def plot_question_results(question, percentages, vote_allocation, total_response
     # Keep track of how many custom colors we've used
     custom_color_count = 0
     
-    for answer in answers:
-        if answer.lower() in [k.lower() for k in color_map.keys()]:
-            # Use the predefined color for Yes, No, or Abstain (case insensitive)
-            for k in color_map.keys():
-                if answer.lower() == k.lower():
-                    colors.append(color_map[k])
-                    break
+    for label in simplified_labels:
+        if label in color_map:
+            colors.append(color_map[label])
         else:
-            # Generate a color from viridis palette for other answers
+            # Generate a color from plasma palette for other answers
             custom_color_count += 1
-            # Use viridis colormap but avoid the greenish and reddish parts that might be confused with Yes/No
             colors.append(plt.cm.plasma(0.1 + 0.8 * custom_color_count / (len(answers) + 1)))
     
     # Explode the largest slice slightly for emphasis
@@ -190,7 +203,7 @@ def plot_question_results(question, percentages, vote_allocation, total_response
     # Plot percentages as a pie chart with enhanced visuals (no shadow)
     wedges, texts, autotexts = ax1.pie(
         pcts, 
-        labels=answers, 
+        labels=simplified_labels, 
         autopct='%1.1f%%',
         colors=colors,
         startangle=90,
@@ -212,8 +225,8 @@ def plot_question_results(question, percentages, vote_allocation, total_response
         axis.spines['left'].set_visible(True)
         axis.set_facecolor('#f9f9f9')
     
-    # Set title with total responses info and No Selection count
-    ax1.set_title(f'Response Distribution\n(Total Valid Responses: {total_responses}, No Selection: {no_selection_count})', 
+    # Set title with all response counts
+    ax1.set_title(f'Response Distribution\nTotal Responses: {total_number_of_responses} | Considered Responses: {total_responses} | NO OPINION: {no_opinion_count}', 
                  fontsize=12, pad=10)
     
     # Create a clean circle in the middle for better aesthetics
@@ -224,22 +237,43 @@ def plot_question_results(question, percentages, vote_allocation, total_response
     vote_answers = list(vote_allocation.keys())
     vote_counts = list(vote_allocation.values())
     
+    # Create simplified labels for vote allocation
+    vote_simplified_labels = []
+    for answer in vote_answers:
+        if "YES" in answer.upper():
+            vote_simplified_labels.append("Yes")
+        elif "NO" in answer.upper() and "OPINION" not in answer.upper():
+            vote_simplified_labels.append("No")
+        elif "ABSTAIN" in answer.upper():
+            vote_simplified_labels.append("Abstain")
+        else:
+            vote_simplified_labels.append(answer)  # Keep original if no match
+    
     # Filter to only include answers with votes
     nonzero_indices = [i for i, count in enumerate(vote_counts) if count > 0]
     vote_answers = [vote_answers[i] for i in nonzero_indices]
+    vote_simplified_labels = [vote_simplified_labels[i] for i in nonzero_indices]
     vote_counts = [vote_counts[i] for i in nonzero_indices]
     
     if vote_counts:  # Only create the pie if there are votes
-        # Generate colors for the vote pie chart (match colors with first pie chart)
+        # Generate colors for the vote pie chart (match colors with simplified labels)
         vote_colors = []
-        for ans in vote_answers:
-            idx = answers.index(ans)
-            vote_colors.append(colors[idx])
+        for label in vote_simplified_labels:
+            if label in color_map:
+                vote_colors.append(color_map[label])
+            else:
+                # Try to match with the first pie chart colors if possible
+                try:
+                    idx = simplified_labels.index(label)
+                    vote_colors.append(colors[idx])
+                except ValueError:
+                    # Use a default color if not found
+                    vote_colors.append(plt.cm.plasma(0.5))
         
         # Plot vote allocation as a pie chart (no shadow)
         vote_wedges, vote_texts, vote_autotexts = ax2.pie(
             vote_counts,
-            labels=vote_answers,
+            labels=vote_simplified_labels,
             autopct=lambda p: f'{int(p * sum(vote_counts) / 100)}',  # Show actual vote count
             colors=vote_colors,
             startangle=90,
@@ -259,13 +293,13 @@ def plot_question_results(question, percentages, vote_allocation, total_response
     # Set title for the vote allocation
     ax2.set_title('3-Vote Allocation', fontsize=12, pad=10)
     
-    # Add a legend outside the plots for better readability
+    # Add a legend outside the plots for better readability if there are many answers
     if len(answers) > 3:
-        handles = [plt.Rectangle((0,0),1,1, color=colors[i]) for i in range(len(answers))]
-        legend = fig.legend(handles, answers, 
+        handles = [plt.Rectangle((0,0),1,1, color=colors[i]) for i in range(len(simplified_labels))]
+        legend = fig.legend(handles, simplified_labels, 
                            loc='upper center', 
                            bbox_to_anchor=(0.5, 0.32),
-                           ncol=min(5, len(answers)),
+                           ncol=min(5, len(simplified_labels)),
                            frameon=True,
                            facecolor='white',
                            edgecolor='lightgray',
@@ -328,15 +362,19 @@ def main():
         print(f"\nAnalyzing question: {question}")
         
         # Analyze the question
-        counts, percentages, total_responses, no_selection_count = analyze_question(survey_data, question)
+        counts, percentages, total_responses, no_opinion_count = analyze_question(survey_data, question)
         
         if not percentages:
             print(f"  No valid responses for this question.")
             continue
         
-        # Print percentages
-        print(f"  Total valid responses: {total_responses}")
-        print(f"  'No Selection' responses: {no_selection_count}")
+        # Calculate total number of responses
+        total_number_of_responses = total_responses + no_opinion_count
+        
+        # Print response counts
+        print(f"  Total Number of responses: {total_number_of_responses}")
+        print(f"  Considered responses: {total_responses}")
+        print(f"  'NO OPINION' responses: {no_opinion_count}")
         print("  Response percentages:")
         for answer, pct in sorted(percentages.items(), key=lambda x: x[1], reverse=True):
             print(f"    {answer}: {pct:.1f}%")
@@ -352,7 +390,7 @@ def main():
         
         # Plot the results with the specified output directory
         plot_file = plot_question_results(question, percentages, vote_allocation, total_responses, 
-                                         no_selection_count, calculation_text, output_dir=output_dir)
+                                         no_opinion_count, calculation_text, output_dir=output_dir)
         
         # Save results for summary
         results.append({
@@ -360,7 +398,7 @@ def main():
             'percentages': percentages,
             'vote_allocation': vote_allocation,
             'total_responses': total_responses,
-            'no_selection_count': no_selection_count,
+            'no_opinion_count': no_opinion_count,
             'calculation_text': calculation_text,
             'plot_file': plot_file
         })
